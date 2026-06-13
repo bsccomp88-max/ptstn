@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>POS Service BSC COMP</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #eef2f7;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+h2 {
+    text-align: center;
+    color: #2c3e50;
+    margin-top: 0;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+input, select, textarea, button {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 14px;
+}
+button {
+    background: #2980b9;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    margin-right: 8px;
+    margin-bottom: 8px;
+}
+button:hover {
+    background: #1f618d;
+}
+.btn-danger {
+    background: #c0392b;
+}
+.btn-danger:hover {
+    background: #a02a1e;
+}
+.btn-wa {
+    background: #25d366;
+}
+.btn-wa:hover {
+    background: #1da851;
+}
+.btn-import {
+    background: #9b59b6;
+}
+.btn-import:hover {
+    background: #804399;
+}
+.search-box {
+    margin-bottom: 15px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 14px;
+}
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background: #f2f4f6;
+}
+@media (max-width: 768px) {
+    table {
+        display: block;
+        overflow-x: auto;
+    }
+}
+
+/* Print Style */
+@media print {
+body *{visibility:hidden}
+#printArea,#areaCetak,#areaCetak *{visibility:visible}
+#areaCetak{display:block;position:absolute;left:0;top:0;width:80mm}
+@page{size:80mm auto;margin:5mm}
+}
+
+/* Nota / Struk Cetak */
+.nota-cetak {
+    width: 80mm;
+    margin: 0 auto;
+    font-family: Arial;
+    font-size: 12px;
+    line-height: 1.4;
+}
+.nota-cetak .header {
+    text-align: center;
+    margin-bottom: 10px;
+}
+.nota-cetak hr {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 5px 0;
+}
+.print-area {
+    display: none;
+}
+@media print {
+    .print-area {
+        display: block;
+    }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>POS Service Laptop, MacBook & Gadget - BSC COMP</h2>
+
+<div class="grid">
+<input id="invoice" placeholder="No Invoice (Otomatis jika kosong)">
+<input id="nama" placeholder="Nama Konsumen" required>
+<input id="wa" placeholder="No WhatsApp (628...)">
+<input id="alamat" placeholder="Alamat">
+<input id="device" placeholder="Jenis Perangkat">
+<input id="merk" placeholder="Merk/Model">
+<input id="sn" placeholder="Serial Number">
+<input id="keluhan" placeholder="Keluhan">
+<input id="estimasi" type="number" placeholder="Estimasi Biaya (Rp)" min="0">
+<select id="status">
+<option value="Masuk">Masuk</option>
+<option value="Diagnosa">Diagnosa</option>
+<option value="Dikerjakan">Dikerjakan</option>
+<option value="Menunggu Sparepart">Menunggu Sparepart</option>
+<option value="Selesai">Selesai</option>
+<option value="Diambil">Diambil</option>
+</select>
+</div>
+
+<div>
+<button onclick="simpan()">Simpan Data</button>
+<button onclick="ekspor()">Ekspor JSON</button>
+<button class="btn-import" onclick="document.getElementById('fileInput').click()">Impor JSON</button>
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="impor(event)">
+<button onclick="resetForm()">Reset Form</button>
+<button onclick="printSemua()">Cetak Semua Data</button>
+</div>
+
+<div class="search-box">
+<input type="text" id="search" placeholder="Cari berdasarkan nama / invoice / status..." oninput="render()">
+</div>
+
+<table>
+<thead>
+<tr>
+<th>Invoice</th>
+<th>Nama</th>
+<th>WA</th>
+<th>Alamat</th>
+<th>Perangkat</th>
+<th>Merk</th>
+<th>SN</th>
+<th>Keluhan</th>
+<th>Estimasi</th>
+<th>Status</th>
+<th>Aksi</th>
+</tr>
+</thead>
+<tbody id="tb"></tbody>
+</table>
+</div>
+
+<!-- Area Cetak Nota -->
+<div class="print-area" id="areaCetak"></div>
+
+<script>
+let db = JSON.parse(localStorage.getItem("bsc_service_db") || "[]");
+let editIndex = null;
+
+function val(id) {
+    return document.getElementById(id).value.trim();
+}
+
+function setVal(id, value) {
+    document.getElementById(id).value = value || "";
+}
+
+function simpan() {
+    const data = {
+        invoice: val("invoice") || ("INV-" + Date.now()),
+        nama: val("nama"),
+        wa: val("wa"),
+        alamat: val("alamat"),
+        device: val("device"),
+        merk: val("merk"),
+        sn: val("sn"),
+        keluhan: val("keluhan"),
+        estimasi: val("estimasi"),
+        status: val("status")
+    };
+
+    if (!data.nama) {
+        alert("Nama konsumen wajib diisi!");
+        return;
+    }
+
+    if (editIndex !== null) {
+        db[editIndex] = data;
+        editIndex = null;
+        alert("Data berhasil diperbarui!");
+    } else {
+        db.push(data);
+        alert("Data berhasil disimpan!");
+    }
+
+    resetForm();
+    render();
+}
+
+function editData(index) {
+    const data = db[index];
+    setVal("invoice", data.invoice);
+    setVal("nama", data.nama);
+    setVal("wa", data.wa);
+    setVal("alamat", data.alamat);
+    setVal("device", data.device);
+    setVal("merk", data.merk);
+    setVal("sn", data.sn);
+    setVal("keluhan", data.keluhan);
+    setVal("estimasi", data.estimasi);
+    setVal("status", data.status);
+    editIndex = index;
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function hapusData(index) {
+    if (confirm("Yakin ingin menghapus data ini?")) {
+        db.splice(index, 1);
+        render();
+    }
+}
+
+// --- EKSPOR JSON ---
+function ekspor() {
+    const blob = new Blob([JSON.stringify(db, null, 2)], {type: "application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "data_konsumen_service.json";
+    a.click();
+}
+
+// --- IMPOR JSON ---
+function impor(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const dataImpor = JSON.parse(e.target.result);
+            if (Array.isArray(dataImpor)) {
+                db = db.concat(dataImpor); // Gabungkan data lama & baru
+                simpanKeStorage();
+                render();
+                alert("Data berhasil diimpor!");
+            } else {
+                alert("Format file tidak sesuai!");
+            }
+        } catch (err) {
+            alert("File bukan JSON yang valid!");
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = ""; // Reset input
+}
+
+function resetForm() {
+    document.querySelectorAll("input, select").forEach(el => el.value = "");
+    editIndex = null;
+}
+
+// --- AUTO KIRIM WA (PESAN BERUBAH SESUAI STATUS) ---
+function kirimWA(index) {
+    const r = db[index];
+    if (!r.wa) {
+        alert("Nomor WhatsApp belum diisi!");
+        return;
+    }
+    let nomor = r.wa.replace(/^0/, "62").replace(/[^0-9]/g, "");
+    const estimasiRupiah = new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0
+    }).format(r.estimasi || 0);
+
+    let teksPesan = "";
+    if (r.status === "Masuk") {
+        teksPesan = `Halo *${r.nama}*,%0A%0AKami dari *BSC COMP* telah menerima perangkat Anda untuk diperbaiki.%0A%0ADetail Data:%0ANo Invoice: *${r.invoice}*%0APerangkat: ${r.device} ${r.merk}%0AS/N: ${r.sn}%0AKeluhan: ${r.keluhan}%0AEstimasi Biaya: ${estimasiRupiah}%0A%0AKami akan segera melakukan diagnosa dan menghubungi Anda kembali. Terima kasih!`;
+    } else if (r.status === "Diagnosa") {
+        teksPesan = `Halo *${r.nama}*,%0A%0APerangkat Anda sedang dalam tahap *Diagnosa* di BSC COMP.%0AKami sedang memeriksa kerusakan secara detail.%0A%0ANo Invoice: *${r.invoice}*%0AStatus: Sedang Diperiksa%0A%0AKami kabari lagi sebentar ya.`;
+    } else if (r.status === "Selesai") {
+        teksPesan = `Halo *${r.nama}*,%0A%0AAlhamdulillah, perangkat Anda *SUDAH SELESAI DIPERBAIKI*! ✅%0A%0ANo Invoice: *${r.invoice}*%0ATotal Biaya: ${estimasiRupiah}%0A%0ASilakan diambil di toko kami. Terima kasih sudah mempercayakan perangkat Anda ke BSC COMP.`;
+    } else if (r.status === "Diambil") {
+        teksPesan = `Halo *${r.nama}*,%0A%0ATerima kasih sudah mengambil perangkat Anda di BSC COMP.%0ASemoga berfungsi baik kembali. Sampai jumpa lagi!`;
+    } else {
+        teksPesan = `Halo *${r.nama}*,%0A%0AUpdate status perangkat Anda (Invoice: *${r.invoice}*)%0AStatus saat ini: *${r.status}*%0A%0ATerima kasih telah menunggu, kami akan kabari perkembangan selanjutnya. - BSC COMP`;
+    }
+
+    window.open(`https://wa.me/${nomor}?text=${teksPesan}`, "_blank");
+}
+
+// --- CETAK NOTA SERVICE ---
+
+function cetakNota(index) {
+    const r = db[index];
+    const estimasiRupiah = new Intl.NumberFormat('id-ID',{
+        style:'currency',currency:'IDR',minimumFractionDigits:0
+    }).format(r.estimasi||0);
+    const tanggal=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+    const notaHTML=`
+<div class="nota-cetak" style="font-family:'Courier New',monospace;width:80mm;padding:5px;">
+<div style="text-align:center">
+<b style="font-size:18px">BSC COMP</b><br>
+Service Laptop, MacBook & Gadget<br>
+WA: 0853-1895-7627
+</div>
+<div style="text-align:center">========================================</div>
+<div style="text-align:center"><b>TANDA TERIMA SERVICE</b></div><br>
+<table style="width:100%;font-size:12px">
+<tr><td>No Invoice</td><td>:</td><td>${r.invoice}</td></tr>
+<tr><td>Tanggal</td><td>:</td><td>${tanggal}</td></tr>
+<tr><td>Nama</td><td>:</td><td>${r.nama}</td></tr>
+<tr><td>No. WA</td><td>:</td><td>${r.wa}</td></tr>
+<tr><td>Alamat</td><td>:</td><td>${r.alamat}</td></tr>
+<tr><td>Perangkat</td><td>:</td><td>${r.device}</td></tr>
+<tr><td>Merk/Model</td><td>:</td><td>${r.merk}</td></tr>
+<tr><td>Serial No</td><td>:</td><td>${r.sn}</td></tr>
+</table>
+<br><b>Keluhan:</b><br>${r.keluhan}<br><br>
+<b>Estimasi Biaya:</b><br>${estimasiRupiah}<br><br>
+<b>Status:</b><br>${r.status}<br><br>
+----------------------------------------<br>
+<b>Catatan:</b>
+<ul style="padding-left:18px">
+<li>Simpan nota ini sebagai bukti pengambilan.</li>
+<li>Estimasi biaya dapat berubah setelah diagnosa.</li>
+<li>Barang yang tidak diambil lebih dari 30 hari menjadi tanggung jawab pemilik.</li>
+</ul>
+<div style="text-align:center">
+Terima kasih telah mempercayakan<br><b>BSC COMP</b>
+</div>
+<div style="text-align:center">========================================</div>
+</div>`;
+document.getElementById("areaCetak").innerHTML=notaHTML;
+window.print();
+document.getElementById("areaCetak").innerHTML="";
+}
+
+
+// Print all data
+function printSemua() {
+    const searchKeyword = val("search").toLowerCase();
+    const filtered = db.filter(row => {
+        return Object.values(row).some(val => String(val).toLowerCase().includes(searchKeyword));
+    });
+
+    let content = `
+    <div style="width:100%;padding:10px">
+        <h2 style="text-align:center">Laporan Data Service - BSC COMP</h2>
+        <p style="text-align:right">Tanggal Cetak: ${new Date().toLocaleString('id-ID')}</p>
+        <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse">
+            <thead><tr style="background:#eee">
+                <th>Invoice</th><th>Nama</th><th>WA</th><th>Perangkat</th><th>SN</th><th>Keluhan</th><th>Estimasi</th><th>Status</th>
+            </tr></thead><tbody>`;
+
+    filtered.forEach(r => {
+        const estimasiRupiah = new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',minimumFractionDigits:0}).format(r.estimasi||0);
+        content += `<tr>
+            <td>${r.invoice}</td><td>${r.nama}</td><td>${r.wa}</td><td>${r.device} ${r.merk}</td><td>${r.sn}</td><td>${r.keluhan}</td><td>${estimasiRupiah}</td><td>${r.status}</td>
+        </tr>`;
+    });
+
+    content += `</tbody></table></div>`;
+    document.getElementById("areaCetak").innerHTML = content;
+    window.print();
+    document.getElementById("areaCetak").innerHTML = "";
+}
+
+function simpanKeStorage() {
+    localStorage.setItem("bsc_service_db", JSON.stringify(db));
+}
+
+function render() {
+    const searchKeyword = val("search").toLowerCase();
+    const t = document.getElementById("tb");
+    t.innerHTML = "";
+
+    const filtered = db.filter(row => {
+        return Object.values(row).some(val => String(val).toLowerCase().includes(searchKeyword));
+    });
+
+    filtered.forEach((r, i) => {
+        const estimasiRupiah = new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            minimumFractionDigits: 0
+        }).format(r.estimasi || 0);
+
+        t.innerHTML += `<tr>
+            <td>${r.invoice}</td>
+            <td>${r.nama}</td>
+            <td>${r.wa}</td>
+            <td>${r.alamat}</td>
+            <td>${r.device}</td>
+            <td>${r.merk}</td>
+            <td>${r.sn}</td>
+            <td>${r.keluhan}</td>
+            <td>${estimasiRupiah}</td>
+            <td>${r.status}</td>
+            <td class="btn-aksi">
+                <button onclick="editData(${i})">Edit</button>
+                <button class="btn-danger" onclick="hapusData(${i})">Hapus</button>
+                <button onclick="cetakNota(${i})">Cetak Nota</button>
+                <button class="btn-wa" onclick="kirimWA(${i})">Kirim WA</button>
+            </td>
+        </tr>`;
+    });
+
+    simpanKeStorage();
+}
+
+render();
+</script>
+</body>
+</html>
